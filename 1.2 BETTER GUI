@@ -1,0 +1,168 @@
+-- Create the ScreenGui
+local player = game.Players.LocalPlayer
+local screenGui = Instance.new("ScreenGui")
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Create the Glide TextButton
+local glideButton = Instance.new("TextButton")
+glideButton.Size = UDim2.new(0.2, 0, 0.1, 0) -- 20% width, 10% height
+glideButton.Position = UDim2.new(0.6, 0, 0.1, 0) -- Top right of the screen
+glideButton.Text = "Activate Glide"
+glideButton.BackgroundColor3 = Color3.new(1, 0, 0) -- Red background
+glideButton.TextColor3 = Color3.new(1, 1, 1) -- White text
+glideButton.Parent = screenGui
+
+-- Create the "2" TextButton
+local button2 = Instance.new("TextButton")
+button2.Size = UDim2.new(0.1, 0, 0.1, 0) -- Cube-like size
+button2.Position = UDim2.new(0.5, 0, 0.1, 0) -- Left of Glide button
+button2.Text = "2"
+button2.BackgroundColor3 = Color3.new(0, 1, 1) -- Cyan background
+button2.TextColor3 = Color3.new(1, 1, 1) -- White text
+button2.Parent = screenGui
+
+-- Cooldown variables
+local glideActive = false
+local glideCooldownActive = false
+local glideCooldownTime = 9 -- Cooldown duration
+local button2CooldownActive = false
+local glideAnimation = Instance.new("Animation")
+glideAnimation.AnimationId = "rbxassetid://136705072136812" -- Glide animation ID
+local button2Animation = Instance.new("Animation")
+button2Animation.AnimationId = "rbxassetid://101979175580754" -- Animation for "2" button
+
+-- Helper function: Stop all animations
+local function stopAllAnimations(character)
+    local humanoid = character:WaitForChild("Humanoid")
+    local animator = humanoid:FindFirstChild("Animator") or humanoid:WaitForChild("Animator")
+    for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+        track:Stop()
+    end
+end
+
+-- Function to activate Glide
+local function activateGlide(animation)
+    if glideActive or glideCooldownActive or button2CooldownActive then return end -- Prevent multiple activations
+
+    -- Ensure the player is in the air
+    local character = player.Character or player.CharacterAdded:Wait()
+    local humanoid = character:WaitForChild("Humanoid")
+    if humanoid:GetState() ~= Enum.HumanoidStateType.Freefall then
+        return -- Exit if the player is not in the air
+    end
+
+    glideActive = true
+    glideCooldownActive = true
+    glideButton.Text = "Cooling Down..."
+    button2.Text = "Cooling Down..." -- Both buttons share cooldown
+
+    -- Play the glide animation
+    local animator = humanoid:FindFirstChild("Animator") or humanoid:WaitForChild("Animator")
+    local glideTrack = animator:LoadAnimation(animation)
+    glideTrack:Play()
+
+    -- Slow down the player's fall
+    local bodyVelocity = Instance.new("BodyVelocity")
+    bodyVelocity.MaxForce = Vector3.new(0, math.huge, 0) -- Only vertical force
+    bodyVelocity.Velocity = Vector3.new(0, -10, 0) -- Slower falling speed
+    bodyVelocity.Parent = character.PrimaryPart
+
+    -- Stop gliding when touching the ground
+    local function onTouchedGround()
+        if not character.PrimaryPart or not glideActive then return end
+        local ray = Ray.new(character.PrimaryPart.Position, Vector3.new(0, -5, 0)) -- Downward ray
+        local part = workspace:FindPartOnRay(ray, character)
+        if part then
+            glideActive = false
+            bodyVelocity:Destroy()
+            glideTrack:Stop()
+        end
+    end
+
+    while glideActive do
+        onTouchedGround()
+        wait(0.1)
+    end
+
+    -- Start cooldown
+    wait(glideCooldownTime)
+    glideCooldownActive = false
+    button2CooldownActive = false
+    glideButton.Text = "Activate Glide"
+    button2.Text = "2"
+end
+
+-- Function to handle Glide button click
+local function glideButtonClick()
+    activateGlide(glideAnimation)
+end
+
+-- Function to handle "2" button click
+local function button2Click()
+    if button2CooldownActive or glideCooldownActive then return end -- Prevent activation if cooldown is active
+
+    -- Ensure the player is in the air
+    local character = player.Character or player.CharacterAdded:Wait()
+    local humanoid = character:WaitForChild("Humanoid")
+    if humanoid:GetState() ~= Enum.HumanoidStateType.Freefall then
+        return -- Exit if the player is not in the air
+    end
+
+    button2CooldownActive = true
+    button2.Text = "Cooling Down..."
+    glideButton.Text = "Cooling Down..." -- Both buttons share cooldown
+
+    -- Stop all currently playing animations
+    stopAllAnimations(character)
+
+    -- Play the "2" animation
+    local animator = humanoid:FindFirstChild("Animator") or humanoid:WaitForChild("Animator")
+    local button2Track = animator:LoadAnimation(button2Animation)
+    button2Track:Play()
+
+    -- Slow fall initially
+    local bodyVelocity = Instance.new("BodyVelocity")
+    bodyVelocity.MaxForce = Vector3.new(0, math.huge, 0)
+    bodyVelocity.Velocity = Vector3.new(0, -12, 0)
+    bodyVelocity.Parent = character.PrimaryPart
+
+    -- Timer to track airtime
+    local startTime = tick()
+    local animationChanged = false
+
+    -- Monitor airtime
+    while button2CooldownActive do
+        if tick() - startTime >= 5 and not animationChanged then
+            -- Switch to faster falling animation
+            button2Track:Stop()
+            local fastFallTrack = animator:LoadAnimation(glideAnimation)
+            fastFallTrack:Play()
+
+            -- Increase falling speed
+            bodyVelocity.Velocity = Vector3.new(0, -30, 0)
+            animationChanged = true
+        end
+
+        -- Stop when grounded
+        local ray = Ray.new(character.PrimaryPart.Position, Vector3.new(0, -5, 0))
+        local part = workspace:FindPartOnRay(ray, character)
+        if part then
+            button2CooldownActive = false
+            bodyVelocity:Destroy()
+            button2Track:Stop()
+            break
+        end
+        wait(0.1)
+    end
+
+    -- Cooldown reset
+    wait(glideCooldownTime)
+    button2CooldownActive = false
+    glideCooldownActive = false
+    button2.Text = "2"
+    glideButton.Text = "Activate Glide"
+end
+
+-- Connect buttons to their respective functions
+glideButton.MouseButton1Click:Connect(glideButtonClick)
+button2.MouseButton1Click:Connect(button2Click)
